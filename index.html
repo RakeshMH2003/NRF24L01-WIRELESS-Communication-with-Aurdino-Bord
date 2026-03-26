@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NRF24L01 Hardware Bridge Simulator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="container">
+
+  <!-- ═══ HEADER ══════════════════════════════════════════════════════════════ -->
+  <div class="header">
+    <h1>📡 NRF24L01 WIRELESS Communication</h1>
+    <div class="sub">Simulation · Web Serial API · Real Hardware I/O · 2.4 GHz</div>
+  </div>
+
+  <!-- ═══ MODE SWITCHER ═══════════════════════════════════════════════════════ -->
+  <div class="mode-banner">
+    <div class="mode-pill sim active" id="modeSimBtn"    onclick="setMode('sim')">⚙ SIMULATION ONLY</div>
+    <div class="mode-pill hw"         id="modeHwBtn"     onclick="setMode('hw')">🔌 HARDWARE ONLY</div>
+    <div class="mode-pill bridge"     id="modeBridgeBtn" onclick="setMode('bridge')">⟷ BRIDGE MODE</div>
+  </div>
+
+  <!-- ═══ HARDWARE CONNECTION PANEL ═══════════════════════════════════════════ -->
+  <div class="hw-panel" id="hwPanel">
+    <div class="hw-panel-title">
+      🔌 HARDWARE SERIAL CONNECTIONS
+      <span class="hw-panel-sub">— Web Serial API (Chrome/Edge only)</span>
+    </div>
+    <div class="hw-grid">
+
+      <!-- TX Port -->
+      <div class="hw-port-box">
+        <div class="hw-port-title">TX ARDUINO — <span>TRANSMITTER PORT</span></div>
+        <div class="hw-row">
+          <select class="baud-select" id="txBaud">
+            <option value="9600">9600 baud</option>
+            <option value="115200" selected>115200 baud</option>
+            <option value="57600">57600 baud</option>
+          </select>
+          <button class="btn-small btn-connect-tx" onclick="connectPort('tx')" id="txConnectBtn">▶ CONNECT TX</button>
+          <button class="btn-small btn-disconnect"  onclick="disconnectPort('tx')" id="txDisconnectBtn" style="display:none">✕ DISC</button>
+        </div>
+        <div class="hw-status" id="txHwStatus">
+          <div class="hw-dot" id="txHwDot"></div>
+          <span id="txHwStatusText">Not connected</span>
+        </div>
+      </div>
+
+      <!-- RX Port -->
+      <div class="hw-port-box">
+        <div class="hw-port-title rx-title">RX ARDUINO — <span>RECEIVER PORT</span></div>
+        <div class="hw-row">
+          <select class="baud-select" id="rxBaud">
+            <option value="9600">9600 baud</option>
+            <option value="115200" selected>115200 baud</option>
+            <option value="57600">57600 baud</option>
+          </select>
+          <button class="btn-small btn-connect-rx" onclick="connectPort('rx')" id="rxConnectBtn">▶ CONNECT RX</button>
+          <button class="btn-small btn-disconnect"  onclick="disconnectPort('rx')" id="rxDisconnectBtn" style="display:none">✕ DISC</button>
+        </div>
+        <div class="hw-status" id="rxHwStatus">
+          <div class="hw-dot" id="rxHwDot"></div>
+          <span id="rxHwStatusText">Not connected</span>
+        </div>
+      </div>
+
+    </div><!-- /.hw-grid -->
+
+    <!-- No WebSerial warning -->
+    <div class="no-serial-warn" id="noSerialWarn">
+      ⚠ Web Serial API not supported. Use Chrome or Edge (desktop). For Firefox/Safari, use a Python serial bridge script instead.
+    </div>
+
+    <!-- Wiring guide -->
+    <div class="wire-guide">
+      <div class="wire-guide-title">// NRF24L01 → ARDUINO WIRING (BOTH BOARDS IDENTICAL)</div>
+      <table class="wire-table">
+        <tr><th>NRF24L01 PIN</th><th>ARDUINO PIN</th><th>NOTES</th></tr>
+        <tr><td class="w-nrf">VCC</td> <td class="w-ard">3.3V</td>  <td class="w-note">⚠ NOT 5V — use 3.3V only (add 10µF cap if unstable)</td></tr>
+        <tr><td class="w-nrf">GND</td> <td class="w-ard">GND</td>   <td class="w-note">Common ground</td></tr>
+        <tr><td class="w-nrf">CE</td>  <td class="w-ard">D9</td>    <td class="w-note">Chip Enable (TX/RX mode select)</td></tr>
+        <tr><td class="w-nrf">CSN</td> <td class="w-ard">D10</td>   <td class="w-note">Chip Select Not (SPI)</td></tr>
+        <tr><td class="w-nrf">SCK</td> <td class="w-ard">D13</td>   <td class="w-note">SPI Clock</td></tr>
+        <tr><td class="w-nrf">MOSI</td><td class="w-ard">D11</td>   <td class="w-note">SPI Data TX→module</td></tr>
+        <tr><td class="w-nrf">MISO</td><td class="w-ard">D12</td>   <td class="w-note">SPI Data module→TX</td></tr>
+        <tr><td class="w-nrf">IRQ</td> <td class="w-ard">D2 (opt)</td><td class="w-note">Interrupt — optional</td></tr>
+      </table>
+    </div>
+  </div><!-- /.hw-panel -->
+
+  <!-- ═══ FREQUENCY / STATUS BADGES ══════════════════════════════════════════ -->
+  <div class="freq-bar">
+    <div class="badge"><span class="status-dot"></span>LINK ACTIVE</div>
+    <div class="badge">FREQ: <span id="freqDisplay">2.476 GHz</span></div>
+    <div class="badge">CHANNEL: <span id="chanDisplay">76</span></div>
+    <div class="badge">DATA RATE: <span>1 Mbps</span></div>
+    <div class="badge">PA LEVEL: <span>HIGH</span></div>
+    <div class="badge">MODE: <span id="modeDisplay">SIMULATION</span></div>
+  </div>
+
+  <!-- ═══ TWO BOARDS + RF CHANNEL ════════════════════════════════════════════ -->
+  <div class="boards">
+
+    <!-- TX Board -->
+    <div class="board tx" id="txBoard">
+      <div class="board-badge sim-badge" id="txBoardBadge">SIM</div>
+      <div class="board-label">Arduino UNO #1</div>
+      <div class="board-title">📤 TRANSMITTER</div>
+      <div class="board-sub">NRF24L01 · TX Mode</div>
+      <div class="led-row">
+        <div class="led"><div class="led-dot" id="txPowerLed"></div><span>PWR</span></div>
+        <div class="led"><div class="led-dot" id="txSpiLed"></div><span>SPI</span></div>
+        <div class="led"><div class="led-dot" id="txTxLed"></div><span>TX</span></div>
+        <div class="led"><div class="led-dot" id="txAckLed"></div><span>ACK</span></div>
+        <div class="led"><div class="led-dot" id="txHwLed"></div><span>HW</span></div>
+      </div>
+      <div class="pins">
+        <div class="pin-title">// NRF24L01 PIN MAP</div>
+        <div class="pin-row"><span class="pin-name">VCC</span> <span class="pin-val">3.3V ⚠️</span></div>
+        <div class="pin-row"><span class="pin-name">CE</span>  <span class="pin-val">D9</span></div>
+        <div class="pin-row"><span class="pin-name">CSN</span> <span class="pin-val">D10</span></div>
+        <div class="pin-row"><span class="pin-name">SCK</span> <span class="pin-val">D13</span></div>
+        <div class="pin-row"><span class="pin-name">MOSI</span><span class="pin-val">D11</span></div>
+        <div class="pin-row"><span class="pin-name">MISO</span><span class="pin-val">D12</span></div>
+      </div>
+      <div class="serial-title">
+        ⬛ Serial Monitor — TX
+        <span class="hw-tag" id="txHwTag"></span>
+      </div>
+      <div class="serial" id="txSerial"></div>
+    </div>
+
+    <!-- RF Channel (middle column) -->
+    <div class="channel">
+      <div class="ch-label">2.4 GHz<br>RF LINK</div>
+      <div class="antenna">📡</div>
+      <div class="waves" id="waveAnim">
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+      </div>
+      <div class="rssi-bar"><div class="rssi-fill" id="rssiBar"></div></div>
+      <div class="ch-label" id="rssiLabel">RSSI: —</div>
+      <div class="antenna" style="font-size:1.3rem">📡</div>
+    </div>
+
+    <!-- RX Board -->
+    <div class="board rx" id="rxBoard">
+      <div class="board-badge sim-badge" id="rxBoardBadge">SIM</div>
+      <div class="board-label">Arduino UNO #2</div>
+      <div class="board-title">📥 RECEIVER</div>
+      <div class="board-sub">NRF24L01 · RX Mode</div>
+      <div class="led-row">
+        <div class="led"><div class="led-dot" id="rxPowerLed"></div><span>PWR</span></div>
+        <div class="led"><div class="led-dot" id="rxSpiLed"></div><span>SPI</span></div>
+        <div class="led"><div class="led-dot" id="rxRxLed"></div><span>RX</span></div>
+        <div class="led"><div class="led-dot" id="rxAckLed"></div><span>ACK</span></div>
+        <div class="led"><div class="led-dot" id="rxHwLed"></div><span>HW</span></div>
+      </div>
+      <div class="pins">
+        <div class="pin-title">// NRF24L01 PIN MAP</div>
+        <div class="pin-row"><span class="pin-name">VCC</span> <span class="pin-val">3.3V ⚠️</span></div>
+        <div class="pin-row"><span class="pin-name">CE</span>  <span class="pin-val">D9</span></div>
+        <div class="pin-row"><span class="pin-name">CSN</span> <span class="pin-val">D10</span></div>
+        <div class="pin-row"><span class="pin-name">SCK</span> <span class="pin-val">D13</span></div>
+        <div class="pin-row"><span class="pin-name">MOSI</span><span class="pin-val">D11</span></div>
+        <div class="pin-row"><span class="pin-name">MISO</span><span class="pin-val">D12</span></div>
+      </div>
+      <div class="serial-title">
+        ⬛ Serial Monitor — RX
+        <span class="hw-tag" id="rxHwTag"></span>
+      </div>
+      <div class="serial" id="rxSerial"></div>
+    </div>
+
+  </div><!-- /.boards -->
+
+  <!-- ═══ PACKET TRAVEL STRIP ══════════════════════════════════════════════════ -->
+  <div class="packet-strip">
+    <div class="strip-label">PACKET TRAVEL</div>
+    <div class="packet-track">
+      <div class="packet-node" id="packetNode">PKT</div>
+    </div>
+  </div>
+
+  <!-- ═══ CONTROLS ════════════════════════════════════════════════════════════ -->
+  <div class="controls">
+    <div class="ctrl-group">
+      <div class="ctrl-label">MESSAGE PAYLOAD (TX→HW)</div>
+      <input class="ctrl-input" type="text" id="msgInput"
+             value="Hello World" maxlength="32"
+             placeholder="Max 32 chars (NRF limit)">
+    </div>
+    <div class="ctrl-group" style="max-width:155px">
+      <div class="ctrl-label">PRESET MESSAGES</div>
+      <select class="ctrl-input" id="presetSelect" onchange="applyPreset()">
+        <option value="">-- Select --</option>
+        <option value="Hello World">Hello World</option>
+        <option value="TEMP:28.5C HUM:62%">Sensor Data</option>
+        <option value="LED_ON">LED ON</option>
+        <option value="LED_OFF">LED OFF</option>
+        <option value="PING">Ping</option>
+        <option value="STATUS_OK">Status OK</option>
+        <option value="ALERT:MOTION">Motion Alert</option>
+        <option value="BATT:3.7V">Battery Level</option>
+        <option value="SERVO:90">Servo 90°</option>
+        <option value="RELAY:1">Relay ON</option>
+        <option value="RELAY:0">Relay OFF</option>
+      </select>
+    </div>
+    <div class="ctrl-group" style="max-width:130px">
+      <div class="ctrl-label">CHANNEL (0–125)</div>
+      <input class="ctrl-input" type="number" id="chanInput"
+             value="76" min="0" max="125" oninput="updateChannel()">
+    </div>
+    <div class="ctrl-group" style="max-width:130px">
+      <div class="ctrl-label">INTERFERENCE</div>
+      <select class="ctrl-input" id="noiseSelect">
+        <option value="0">None</option>
+        <option value="0.1">Low (10%)</option>
+        <option value="0.25">Medium (25%)</option>
+        <option value="0.4">High (40%)</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <button class="btn btn-tx"    onclick="sendPacket()">▶ TRANSMIT</button>
+      <button class="btn btn-auto"  id="autoBtn" onclick="toggleAuto()">⟳ AUTO</button>
+      <button class="btn btn-clear" onclick="clearLogs()">✕ CLEAR</button>
+    </div>
+  </div><!-- /.controls -->
+
+  <!-- ═══ STATS ════════════════════════════════════════════════════════════════ -->
+  <div class="stats">
+    <div class="stat-card"><div class="stat-label">PACKETS SENT</div>   <div class="stat-value orange" id="statSent">0</div></div>
+    <div class="stat-card"><div class="stat-label">RECEIVED</div>        <div class="stat-value green"  id="statRecv">0</div></div>
+    <div class="stat-card"><div class="stat-label">DROPPED</div>         <div class="stat-value red"    id="statDrop">0</div></div>
+    <div class="stat-card"><div class="stat-label">SUCCESS RATE</div>    <div class="stat-value"        id="statRate">—</div></div>
+    <div class="stat-card"><div class="stat-label">LATENCY</div>         <div class="stat-value"        id="statLatency">—</div></div>
+    <div class="stat-card"><div class="stat-label">BYTES SENT</div>      <div class="stat-value"        id="statBytes">0</div></div>
+    <div class="stat-card"><div class="stat-label">HW PACKETS IN</div>   <div class="stat-value purple" id="statHwIn">0</div></div>
+    <div class="stat-card"><div class="stat-label">HW PACKETS OUT</div>  <div class="stat-value purple" id="statHwOut">0</div></div>
+  </div>
+
+  <!-- ═══ RAW SERIAL I/O ═══════════════════════════════════════════════════════ -->
+  <div class="raw-panel">
+    <div class="raw-panel-title">
+      🟣 RAW HARDWARE SERIAL I/O
+      <span class="raw-panel-sub">— send raw commands to connected Arduinos</span>
+    </div>
+    <div class="raw-input-row">
+      <select class="baud-select raw-target-select" id="rawTarget">
+        <option value="tx">→ TX Arduino</option>
+        <option value="rx">→ RX Arduino</option>
+      </select>
+      <input class="raw-input" type="text" id="rawInput"
+             placeholder="Type command (e.g. LED_ON, PING, SERVO:90)"
+             onkeydown="if(event.key==='Enter') sendRaw()">
+      <button class="btn-raw" onclick="sendRaw()">⬆ SEND</button>
+    </div>
+    <div class="raw-log" id="rawLog"></div>
+  </div>
+
+  <!-- ═══ ARDUINO SKETCH PANEL ════════════════════════════════════════════════ -->
+  <div class="sketch-panel">
+    <div class="sketch-panel-title">📋 ARDUINO SKETCHES — Upload these to your boards</div>
+    <div class="sketch-tabs">
+      <button class="sketch-tab active" onclick="showSketch('tx', this)">TX Sketch</button>
+      <button class="sketch-tab"        onclick="showSketch('rx', this)">RX Sketch</button>
+      <button class="sketch-tab"        onclick="showSketch('sensor', this)">Sensor TX</button>
+    </div>
+    <div class="sketch-code" id="sketchCode"></div>
+  </div>
+
+</div><!-- /.container -->
+
+<script src="sketches.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
